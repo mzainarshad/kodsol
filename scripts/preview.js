@@ -8,6 +8,12 @@
 
 const fs = require('fs');
 const path = require('path');
+
+// Previews must be deterministic, and the SEO assertions below require absolute
+// canonicals. Without an origin the renderer correctly emits relative URLs,
+// which would make the "canonical is absolute" check fail for the wrong reason.
+if (!process.env.SITE_URL) process.env.SITE_URL = 'https://www.kodsol.com';
+
 const { renderListing, renderArticle, renderNotFound } = require('../api/_lib/views');
 
 const outDir = path.join(__dirname, '..', '.preview');

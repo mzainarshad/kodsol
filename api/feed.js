@@ -12,6 +12,7 @@ const { siteUrl, SITE, esc } = require('./_lib/theme');
 const { isValidSlug, toIso, formatDate } = require('./_lib/content');
 const { sanitizeBody, toPlainText, safeImageUrl } = require('./_lib/sanitize');
 const { describeDbError } = require('./_lib/db');
+const { safeHandler } = require('./_lib/handler');
 
 const CACHE_CONTROL = 'public, s-maxage=1800, stale-while-revalidate=86400';
 const LIMIT = 30;
@@ -37,7 +38,7 @@ const x = (s) =>
 /** Strip tags for the feed summary. */
 const strip = (html, max = 320) => toPlainText(html, max);
 
-module.exports = async function handler(req, res) {
+module.exports = safeHandler('feed', async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.setHeader('Allow', 'GET, HEAD');
     return res.status(405).end();
@@ -57,6 +58,7 @@ module.exports = async function handler(req, res) {
     const d = describeDbError(err);
     console.error('[feed] failed:', d.code);
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Kodsol-Blog-Source', 'error');
     return res.status(503).end('Feed temporarily unavailable.');
   }
 
@@ -111,5 +113,6 @@ ${items}
 
   res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
   res.setHeader('Cache-Control', CACHE_CONTROL);
+  res.setHeader('X-Kodsol-Blog-Source', 'database');
   res.status(200).send(xml);
-};
+});

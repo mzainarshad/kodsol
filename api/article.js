@@ -10,6 +10,7 @@ const blog = require('./_lib/blog');
 const { isValidSlug } = require('./_lib/content');
 const { renderArticle, renderNotFound, renderErrorPage } = require('./_lib/views');
 const { describeDbError } = require('./_lib/db');
+const { safeHandler } = require('./_lib/handler');
 
 const CACHE_CONTROL = 'public, s-maxage=600, stale-while-revalidate=86400';
 
@@ -19,7 +20,7 @@ function sendNotFound(res) {
   res.status(404).send(renderNotFound());
 }
 
-module.exports = async function handler(req, res) {
+module.exports = safeHandler('article', async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.setHeader('Allow', 'GET, HEAD');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -41,13 +42,15 @@ module.exports = async function handler(req, res) {
     res.setHeader('Cache-Control', CACHE_CONTROL);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-Kodsol-Blog-Source', 'database');
     res.status(200).send(renderArticle({ post, prev, next }));
   } catch (err) {
     const d = describeDbError(err);
     console.error('[article] lookup failed:', d.code);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Kodsol-Blog-Source', 'error');
     // A database outage is not the visitor's fault, so do not report 404 here.
     res.status(200).send(renderErrorPage(d.hint));
   }
-};
+});

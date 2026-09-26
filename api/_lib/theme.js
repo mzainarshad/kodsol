@@ -247,8 +247,22 @@ const esc = (s) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+/**
+ * Absolute URL for a site path.
+ *
+ * Prefers the configured canonical origin (SITE_URL). On Vercel it falls back
+ * to the deployment's own production URL, because a relative canonical is
+ * silently invalid for SEO and a missing og:url/og:image is ignored by crawlers.
+ * Only when neither is available does this return a relative path, which keeps
+ * local preview rendering working.
+ */
 const siteUrl = (path) => {
-  const base = String(process.env.SITE_URL || '').replace(/\/+$/, '');
+  const configured = String(process.env.SITE_URL || '').replace(/\/+$/, '');
+  // Vercel exposes these without a protocol, hence the https:// prefix.
+  const deployment = String(
+    process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || ''
+  ).replace(/\/+$/, '');
+  const base = configured || (deployment ? 'https://' + deployment : '');
   const p = path ? (path.startsWith('/') ? path : '/' + path) : '';
   return base + p;
 };

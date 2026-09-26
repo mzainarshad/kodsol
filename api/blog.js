@@ -9,6 +9,7 @@
 const blog = require('./_lib/blog');
 const { renderListing, renderErrorPage } = require('./_lib/views');
 const { describeDbError } = require('./_lib/db');
+const { safeHandler } = require('./_lib/handler');
 
 const PER_PAGE = 12;
 
@@ -16,7 +17,7 @@ const PER_PAGE = 12;
 // so a newly published post appears without a redeploy.
 const CACHE_CONTROL = 'public, s-maxage=600, stale-while-revalidate=86400';
 
-module.exports = async function handler(req, res) {
+module.exports = safeHandler('blog', async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.setHeader('Allow', 'GET, HEAD');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -35,6 +36,7 @@ module.exports = async function handler(req, res) {
     res.setHeader('Cache-Control', CACHE_CONTROL);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-Kodsol-Blog-Source', 'database');
     res.status(200).send(renderListing({ posts, total, page: pageNum, perPage: PER_PAGE }));
   } catch (err) {
     const d = describeDbError(err);
@@ -42,6 +44,7 @@ module.exports = async function handler(req, res) {
     console.error('[blog] listing failed:', d.code);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Kodsol-Blog-Source', 'error');
     res.status(200).send(renderErrorPage(d.hint));
   }
-};
+});

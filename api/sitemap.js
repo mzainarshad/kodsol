@@ -9,6 +9,7 @@
 const blog = require('./_lib/blog');
 const { isValidSlug } = require('./_lib/content');
 const { siteUrl } = require('./_lib/theme');
+const { safeHandler } = require('./_lib/handler');
 
 const CACHE_CONTROL = 'public, s-maxage=3600, stale-while-revalidate=86400';
 
@@ -19,7 +20,7 @@ const xmlEscape = (s) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-module.exports = async function handler(req, res) {
+module.exports = safeHandler('sitemap', async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.setHeader('Allow', 'GET, HEAD');
     return res.status(405).end();
@@ -43,6 +44,7 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     console.error('[sitemap] failed:', (err && err.code) || 'UNKNOWN');
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Kodsol-Blog-Source', 'error');
     return res.status(503).end('Sitemap temporarily unavailable.');
   }
 
@@ -74,7 +76,8 @@ module.exports = async function handler(req, res) {
     )
     .join('\n');
 
+  res.setHeader('X-Kodsol-Blog-Source', 'database');
   res.status(200).send(
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`,
   );
-};
+});
