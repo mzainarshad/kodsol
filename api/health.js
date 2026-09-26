@@ -93,20 +93,35 @@ module.exports = safeHandler('health', async function handler(req, res) {
   for (const [name, load] of [
     ['pg', () => require('pg')],
     ['sanitize-html', () => require('sanitize-html')],
+    ['htmlparser2', () => require('htmlparser2')],
     ['views', () => require('./_lib/views')],
     ['blog', () => require('./_lib/blog')],
   ]) {
     try {
-      load();
-      modules[name] = 'ok';
+      const mod = load();
+      // Record the version that actually got installed. A dependency range in
+      // package.json is not a guarantee: a fresh resolve on the platform can
+      // pull a different build than the lockfile, and that is exactly how
+      // sanitize-html ended up requiring an ESM-only htmlparser2 in production
+      // while working fine locally. Naming the version makes that visible.
+      const pkg = `${name}/package.json`;
+      let version = 'unknown';
+      try { version = require(pkg).version; } catch { /* not resolvable by name */ }
+      modules[name] = mod ? `ok (${version})` : `ok (${version})`;
     } catch (err) {
-      // A MODULE_NOT_FOUND for a package reads as "dependencies did not install".
-      modules[name] = `${(err && err.code) || 'ERROR'}: ${(err && err.message) || 'unknown'}`
-        .slice(0, 200);
+      // A MODULE_NOT_FOUND for a package reads as "dependencies did not install";
+      // ERR_REQUIRE_ESM means the resolved version is the wrong module format.
+      // Only the error code and first line are exposed: the full message can
+      // contain absolute build paths.
+      const code = (err && err.code) || 'ERROR';
+      const first = String((err && err.message) || 'unknown').split('\n')[0];
+      let installed = '';
+      try { installed = ` [installed ${require(`${name}/package.json`).version}]`; } catch { /* not installed */ }
+      modules[name] = `${code}: ${first.replace(/\/var\/task\S*/g, '<path>')}${installed}`.slice(0, 240);
     }
   }
   report.checks.modules = modules;
-  report.checks.allModulesLoaded = Object.values(modules).every((v) => v === 'ok');
+  report.checks.allModulesLoaded = Object.values(modules).every((v) => v.startsWith('ok'));
 
   // --- live database probe -------------------------------------------------
   // Bounded so this endpoint always answers inside the function budget.
