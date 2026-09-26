@@ -37,13 +37,14 @@ module.exports = safeHandler('article', async function handler(req, res) {
     if (!post) return sendNotFound(res);
 
     const { prev, next } = await blog.getNeighbours(post);
+    const fallback = blog.isFallback();
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', CACHE_CONTROL);
+    res.setHeader('Cache-Control', fallback ? 'no-store' : CACHE_CONTROL);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('X-Kodsol-Blog-Source', 'database');
-    res.status(200).send(renderArticle({ post, prev, next }));
+    res.setHeader('X-Kodsol-Blog-Source', fallback ? 'sample' : 'database');
+    res.status(200).send(renderArticle({ post, prev, next, fallback }));
   } catch (err) {
     const d = describeDbError(err);
     console.error('[article] lookup failed:', d.code);

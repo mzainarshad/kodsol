@@ -20,7 +20,7 @@
  */
 'use strict';
 
-const { query, queryReadOnly, describeDbError } = require('./db');
+const { query, queryReadOnly, describeDbError, isInfraFailure } = require('./db');
 
 const TABLE = 'public."Blog"'; // quoted: the table name is capitalised
 
@@ -204,8 +204,13 @@ function toPost(row, schema) {
   };
 }
 
-/** Paginated list of published posts, newest first. */
-async function listPosts({ limit = 12, offset = 0 } = {}) {
+/* ------------------------------------------------------------------ *
+ * Database implementations. Each is wrapped by the public function of
+ * the same name, which decides whether a failure may fall back to
+ * sample content.
+ * ------------------------------------------------------------------ */
+
+async function listPostsFromDb({ limit = 12, offset = 0 } = {}) {
   const schema = await resolveSchema();
   const pub = publishedClause(schema);
   const take = Math.min(Math.max(Number(limit) || 12, 1), 50);
@@ -219,19 +224,14 @@ async function listPosts({ limit = 12, offset = 0 } = {}) {
   return rows.map((r) => toPost(r, schema));
 }
 
-/** Total published post count, for pagination and the sitemap. */
-async function countPosts() {
+async function countPostsFromDb() {
   const schema = await resolveSchema();
   const pub = publishedClause(schema);
   const rows = await query(`SELECT count(*)::int AS n FROM ${TABLE} WHERE ${pub.sql}`, []);
   return rows[0] ? Number(rows[0].n) : 0;
 }
 
-/**
- * Fetch one published post by slug. The slug is validated by the caller and
- * still bound as a parameter, so it cannot alter the query.
- */
-async function getPostBySlug(slug) {
+async function getPostBySlugFromDb(slug) {
   const schema = await resolveSchema();
   const pub = publishedClause(schema);
   const sql =
@@ -242,8 +242,7 @@ async function getPostBySlug(slug) {
   return rows.length ? toPost(rows[0], schema) : null;
 }
 
-/** Slug + date for every published post, for the sitemap. */
-async function listSitemapEntries() {
+async function listSitemapEntriesFromDb() {
   const schema = await resolveSchema();
   const pub = publishedClause(schema);
   const dateCol = schema.map.updatedAt || schema.map.publishedAt || schema.map.createdAt;
@@ -259,8 +258,7 @@ async function listSitemapEntries() {
   }));
 }
 
-/** Nearest published post before/after the given date, for prev/next links. */
-async function getNeighbours(post) {
+async function getNeighboursFromDb(post) {
   const schema = await resolveSchema();
   const pub = publishedClause(schema);
   const dateCol = schema.map.publishedAt || schema.map.createdAt;
@@ -286,6 +284,108 @@ async function getNeighbours(post) {
   return { prev: shape(prevRows[0]), next: shape(nextRows[0]) };
 }
 
+/**
+ * Sample content is opt-in and off by default. When it is enabled and the
+ * database is unusable, the read functions return bundled sample posts instead
+ * of throwing, so a missing or wrong DATABASE_URL degrades to visibly-labelled
+ * placeholder content rather than an error page for every visitor. The routes
+ * detect this via isFallback() and force noindex so it is never indexed.
+ */
+function fallbackEnabled() {
+  return String(process.env.BLOG_FALLBACK || '').trim().toLowerCase() === 'sample';
+}
+
+let servedFallback = false;
+
+/** True when the last read was served from sample content, not the database. */
+function isFallback() {
+  return servedFallback;
+}
+
+const samplePosts = () => require('./sample-posts');
+
+/**
+ * Runs a database read, falling back to sample content when BLOG_FALLBACK=sample.
+ * Only infrastructure failures fall back; a real query that legitimately returns
+ * zero rows must not be turned into sample posts, or a genuinely empty blog
+ * would show content that does not exist.
+ */
+async function read(fn, sampleFn) {
+  // Always reset first: a warm lambda reuses this module across requests, so a
+  // stale true from an earlier fallback must never leak into a later response.
+  servedFallback = false;
+  if (!fallbackEnabled()) return fn();
+  try {
+    return await fn();
+  } catch (err) {
+    if (!isInfraFailure(err)) throw err;
+    servedFallback = true;
+    return sampleFn();
+  }
+}
+
+/** Paginated list of published posts, newest first. */
+async function listPosts(opts = {}) {
+  return read(
+    () => listPostsFromDb(opts),
+    () => samplePosts().slice(0, Math.min(Math.max(Number(opts.limit) || 12, 1), 50))
+  );
+}
+
+/** Total published post count, for pagination and the sitemap. */
+async function countPosts() {
+  return read(countPostsFromDb, () => samplePosts().length);
+}
+
+/**
+ * Fetch one published post by slug. The slug is validated by the caller and
+ * still bound as a parameter, so it cannot alter the query.
+ */
+async function getPostBySlug(slug) {
+  return read(
+    () => getPostBySlugFromDb(slug),
+    () => samplePosts().find((p) => p.slug === slug) || null
+  );
+}
+
+/** Slug + date for every published post, for the sitemap. */
+async function listSitemapEntries() {
+  // The sitemap is a machine contract with crawlers, so it must list only real,
+  // indexable URLs. It therefore never falls back to sample content: sample posts
+  // are served noindex and advertising them would invite indexing of pages that
+  // are meant to stay out of the index.
+  //
+  // With sample fallback enabled, an outage still yields a valid sitemap holding
+  // just the static pages. Without it, the failure is re-thrown so the route can
+  // answer 503, which tells crawlers to retry rather than declaring a complete
+  // but silently post-free site.
+  servedFallback = false;
+  try {
+    return await listSitemapEntriesFromDb();
+  } catch (err) {
+    if (!isInfraFailure(err) || !fallbackEnabled()) throw err;
+    return [];
+  }
+}
+
+/** Nearest published post before/after the given date, for prev/next links. */
+async function getNeighbours(post) {
+  return read(
+    () => getNeighboursFromDb(post),
+    () => {
+      const all = samplePosts().slice().sort(
+        (a, b) => new Date(b.publishedAt) - new Date(a.publishedAt)
+      );
+      const i = all.findIndex((p) => p.slug === post.slug);
+      return {
+        prev: i > 0 ? { title: all[i - 1].title, slug: all[i - 1].slug } : null,
+        next: i >= 0 && i < all.length - 1 ? { title: all[i + 1].title, slug: all[i + 1].slug } : null,
+      };
+    }
+  );
+}
+
+
 function toIsoSafe(v) {
   if (!v) return null;
   const d = v instanceof Date ? v : new Date(v);
@@ -306,6 +406,8 @@ module.exports = {
   resolveSchema,
   publishedClause,
   inspect,
+  isFallback,
+  fallbackEnabled,
   isValidSlug: (s) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s) && s.length <= 120,
   TABLE,
 };

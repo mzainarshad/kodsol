@@ -139,7 +139,22 @@ function card(post) {
 }
 
 /** /blog — paginated index. */
-function renderListing({ posts, total, page: pageNum, perPage }) {
+/**
+ * Banner shown above sample content. It states plainly that these are placeholders,
+ * so a visitor (or a preview screenshot) can never mistake them for real posts.
+ */
+function sampleNotice() {
+  return `
+  <div class="wrap">
+    <p style="border:1px solid rgba(217,119,6,.45);background:rgba(217,119,6,.10);color:#fde68a;border-radius:12px;padding:14px 18px;margin:0 0 28px;font-size:.92rem;line-height:1.6">
+      <strong>Sample content.</strong> The database is not connected, so these are
+      demonstration posts rather than real articles. Set <code>DATABASE_URL</code> in
+      Vercel and redeploy to publish the real blog.
+    </p>
+  </div>`;
+}
+
+function renderListing({ posts, total, page: pageNum, perPage, fallback = false }) {
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const jsonLd = [organizationLd(), webSiteLd(), blogLd()];
 
@@ -166,6 +181,8 @@ function renderListing({ posts, total, page: pageNum, perPage }) {
         <p class="sub reveal">How we think about software, AI, automation and growth — written by the people doing the work.</p>
       </div>
 
+      ${fallback ? sampleNotice() : ''}
+
       ${
         posts.length
           ? `<div class="post-grid">${posts.map(card).join('')}</div>`
@@ -191,11 +208,13 @@ function renderListing({ posts, total, page: pageNum, perPage }) {
     css: BLOG_CSS,
     jsonLd,
     body,
+    // Sample content is a stopgap, never real editorial: keep it out of indexes.
+    noindex: fallback,
   });
 }
 
 /** /blog/<slug> — a single article. */
-function renderArticle({ post, prev, next }) {
+function renderArticle({ post, prev, next, fallback = false }) {
   const url = siteUrl(`/blog/${post.slug}`);
   const img = coverImage(post);
   const title = String(post.seoTitle || post.title || '').trim();
@@ -209,6 +228,7 @@ function renderArticle({ post, prev, next }) {
       <p class="crumbs">
         <a href="/">Home</a><span class="sep">/</span><a href="/blog">Blog</a>
       </p>
+      ${fallback ? sampleNotice() : ''}
       ${tagList(tags)}
       <h1>${esc(post.title)}</h1>
       <div class="post-meta">${byline(post)}</div>
@@ -254,6 +274,7 @@ ${bodyHtml}
     css: BLOG_CSS,
     jsonLd: [articleLd(post)],
     body,
+    noindex: fallback,
   });
 }
 

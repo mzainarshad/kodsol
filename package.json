@@ -8,7 +8,7 @@
     "dev:vercel": "vercel dev",
     "lint": "node scripts/lint-all.js",
     "render:preview": "node scripts/preview.js",
-    "test": "node scripts/test-security.js && node scripts/preview.js && node scripts/check-tech-section.js && node scripts/test-db-resilience.js && node scripts/test-health.js && node scripts/test-feed.js && node scripts/test-module-failure.js && node scripts/test-site-url.js",
+    "test": "node scripts/test-security.js && node scripts/preview.js && node scripts/check-tech-section.js && node scripts/test-db-resilience.js && node scripts/test-health.js && node scripts/test-feed.js && node scripts/test-module-failure.js && node scripts/test-site-url.js && node scripts/test-fallback.js",
     "check:schema": "node scripts/check-schema.js",
     "check:links": "node scripts/check-links.js",
     "check:tech": "node scripts/check-tech-section.js",

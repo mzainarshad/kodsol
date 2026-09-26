@@ -32,12 +32,18 @@ module.exports = safeHandler('blog', async function handler(req, res) {
       blog.countPosts(),
     ]);
 
+    // Sample content must never be indexed, and must never be cached by an edge
+    // node while the real database is still misconfigured.
+    const fallback = blog.isFallback();
+
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', CACHE_CONTROL);
+    res.setHeader('Cache-Control', fallback ? 'no-store' : CACHE_CONTROL);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('X-Kodsol-Blog-Source', 'database');
-    res.status(200).send(renderListing({ posts, total, page: pageNum, perPage: PER_PAGE }));
+    res.setHeader('X-Kodsol-Blog-Source', fallback ? 'sample' : 'database');
+    res
+      .status(200)
+      .send(renderListing({ posts, total, page: pageNum, perPage: PER_PAGE, fallback }));
   } catch (err) {
     const d = describeDbError(err);
     // Log the code, never the connection string.

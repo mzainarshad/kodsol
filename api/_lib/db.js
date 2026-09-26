@@ -210,6 +210,20 @@ async function queryReadOnly(text, params) {
  * PostgreSQL auth/lookup failures are reported by code + a short hint so the
  * connection string itself never leaks.
  */
+/**
+ * True when the failure means "the database could not be reached or is not
+ * configured", as opposed to a genuine query or data problem.
+ *
+ * This is the set of failures where serving bundled fallback content is
+ * reasonable. A bad column name or a SQL syntax error must still surface,
+ * because falling back would hide a real bug behind a pretty page.
+ */
+function isInfraFailure(err) {
+  if (isConnectionFailure(err)) return true;
+  const code = (err && err.code) || '';
+  return code === 'NO_DATABASE_URL' || code === 'DRIVER_MISSING' || code === 'DB_UNAVAILABLE';
+}
+
 function describeDbError(err) {
   // Already classified (for example by resolveSchema) — return it unchanged so
   // the code is not re-derived from an already-human-readable message.
@@ -276,4 +290,4 @@ function describeDbError(err) {
   return { code, hint: 'Database error. Check the server logs for details.' };
 }
 
-module.exports = { query, queryReadOnly, describeDbError, getPool };
+module.exports = { query, queryReadOnly, describeDbError, getPool, isConnectionFailure, isInfraFailure };
