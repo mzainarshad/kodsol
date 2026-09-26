@@ -11,7 +11,40 @@
  */
 'use strict';
 
-const sanitizeHtml = require('sanitize-html');
+/**
+ * sanitize-html is loaded lazily.
+ *
+ * A module-scope require meant a failed dependency install killed every content
+ * route (/blog, /blog/<slug>, /feed.xml, /sitemap.xml) during import, which
+ * Vercel reports as a bare 500 FUNCTION_INVOCATION_FAILED with no log line.
+ * Deferring the require turns that into a normal, classified error — and, more
+ * importantly, a missing sanitizer must never silently pass content through, so
+ * the failure is raised rather than degraded.
+ */
+let sanitizeHtml = null;
+let driverError = null;
+
+function loadSanitizer() {
+  if (sanitizeHtml) return sanitizeHtml;
+  if (!driverError) {
+    try {
+      sanitizeHtml = require('sanitize-html');
+    } catch (err) {
+      driverError = err;
+    }
+  }
+  // A successful require must return here; falling through would report a
+  // working install as missing.
+  if (sanitizeHtml) return sanitizeHtml;
+  const err = new Error('The HTML sanitizer is not available.');
+  err.code = 'SANITIZER_MISSING';
+  err.hint =
+    'The "sanitize-html" package could not be loaded, so untrusted database HTML cannot be ' +
+    'safely rendered. Content is withheld rather than passed through unsanitized. Check the ' +
+    'Vercel build log for a failed dependency install.';
+  throw err;
+}
+
 const { esc } = require('./theme');
 
 const OPTIONS = {
@@ -70,7 +103,7 @@ const OPTIONS = {
 /** Sanitize a full article body. */
 function sanitizeBody(html) {
   if (!html) return '';
-  return sanitizeHtml(String(html), OPTIONS);
+  return loadSanitizer()(String(html), OPTIONS);
 }
 
 /**
@@ -80,7 +113,7 @@ function sanitizeBody(html) {
  */
 function toPlainText(html, maxLen = 165) {
   if (!html) return '';
-  let text = sanitizeHtml(String(html), { allowedTags: [], allowedAttributes: {} });
+  let text = loadSanitizer()(String(html), { allowedTags: [], allowedAttributes: {} });
   text = text
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')

@@ -12,7 +12,41 @@
  */
 'use strict';
 
-const { Pool } = require('pg');
+/**
+ * The driver is loaded lazily and defensively.
+ *
+ * `require('pg')` used to run at module scope, so if the driver was missing or
+ * failed to install, every route in the project died at import time. Vercel
+ * reports that as a bare 500 FUNCTION_INVOCATION_FAILED with no log line, which
+ * is indistinguishable from a database outage. Deferring the require turns it
+ * into an ordinary, reportable error.
+ */
+let PoolCtor = null;
+let driverError = null;
+
+function loadDriver() {
+  if (PoolCtor) return PoolCtor;
+  if (driverError) {
+    const err = new Error('The PostgreSQL driver (pg) is not available.');
+    err.code = 'DRIVER_MISSING';
+    err.hint =
+      'The "pg" package could not be loaded. Check that dependencies installed during the ' +
+      'Vercel build (build logs) and that "pg" is still listed in package.json dependencies.';
+    throw err;
+  }
+  try {
+    ({ Pool: PoolCtor } = require('pg'));
+    return PoolCtor;
+  } catch (err) {
+    driverError = err;
+    const e = new Error('The PostgreSQL driver (pg) is not available.');
+    e.code = 'DRIVER_MISSING';
+    e.hint =
+      'The "pg" package could not be loaded. Check that dependencies installed during the ' +
+      'Vercel build (build logs) and that "pg" is still listed in package.json dependencies.';
+    throw e;
+  }
+}
 
 // Reuse one pool across warm invocations. Without this, every serverless
 // request opens a fresh connection and we exhaust Supabase's connection limit.
@@ -91,7 +125,7 @@ function getPool() {
     throw err;
   }
 
-  const pool = new Pool({
+  const pool = new (loadDriver())({
     connectionString,
     // Serverless: a small pool per warm instance is plenty.
     max: Number(process.env.DB_POOL_MAX || 3),
@@ -188,6 +222,14 @@ function describeDbError(err) {
 
   if (code === 'NO_DATABASE_URL') {
     return { code, hint: 'DATABASE_URL is not configured for this environment.' };
+  }
+  if (code === 'DRIVER_MISSING') {
+    return {
+      code,
+      hint:
+        'The "pg" package could not be loaded by the serverless function. Check the Vercel build ' +
+        'log for a failed dependency install, and confirm "pg" is in package.json dependencies.',
+    };
   }
   if (code === 'DB_UNAVAILABLE') {
     return {

@@ -85,6 +85,29 @@ module.exports = safeHandler('health', async function handler(req, res) {
     report.checks.driver = { loaded: false, error: (err && err.message) || 'unknown' };
   }
 
+  // --- module load check ---------------------------------------------------
+  // A module that fails to require kills the whole function at import time, and
+  // Vercel shows that as FUNCTION_INVOCATION_FAILED with no log line. Checking
+  // the render path explicitly turns it into a readable result here.
+  const modules = {};
+  for (const [name, load] of [
+    ['pg', () => require('pg')],
+    ['sanitize-html', () => require('sanitize-html')],
+    ['views', () => require('./_lib/views')],
+    ['blog', () => require('./_lib/blog')],
+  ]) {
+    try {
+      load();
+      modules[name] = 'ok';
+    } catch (err) {
+      // A MODULE_NOT_FOUND for a package reads as "dependencies did not install".
+      modules[name] = `${(err && err.code) || 'ERROR'}: ${(err && err.message) || 'unknown'}`
+        .slice(0, 200);
+    }
+  }
+  report.checks.modules = modules;
+  report.checks.allModulesLoaded = Object.values(modules).every((v) => v === 'ok');
+
   // --- live database probe -------------------------------------------------
   // Bounded so this endpoint always answers inside the function budget.
   if (!dsn.present) {

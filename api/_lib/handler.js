@@ -20,6 +20,8 @@ const { describeDbError } = require('./db');
 
 /** Status codes that mean "our fault, the visitor did nothing wrong". */
 const DEGRADED = new Set([
+  'DRIVER_MISSING',
+  'SANITIZER_MISSING',
   'DB_UNAVAILABLE',
   'NO_DATABASE_URL',
   'BAD_PROJECT_REF',
