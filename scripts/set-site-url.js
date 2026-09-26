@@ -36,7 +36,11 @@ const current = (html.match(/<link rel="canonical" href="([^"]*)"/) || [])[1] ||
 
 if (CHECK || !ORIGIN) {
   const problems = [];
-  if (/kodsol\.example/.test(current)) problems.push(`canonical is still the placeholder: ${current}`);
+  // Scan the whole document, not just <link rel="canonical">: the placeholder has
+  // also survived inside the Organization JSON-LD "url" field, which is what
+  // search engines read for the publisher's identity.
+  const stray = html.match(/https?:\/\/kodsol\.example[^"'\s]*/g) || [];
+  if (stray.length) problems.push(`placeholder domain still present in ${stray.length} place(s): ${[...new Set(stray)].join(' | ')}`);
   if (!/property="og:url"/.test(html)) problems.push('og:url is missing');
   if (!/property="og:image"/.test(html)) problems.push('og:image is missing');
   if (!/name="twitter:image"/.test(html)) problems.push('twitter:image is missing');
@@ -62,6 +66,9 @@ if (bad) {
 
 const edits = [
   ['canonical', /<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${origin}/">`],
+  // Organization JSON-LD "url" identifies the publisher to search engines.
+  // The key is "@type" in compact JSON-LD but plain "type" if it is ever re-serialised.
+  ['organization json-ld', /("?@?type"\s*:\s*"Organization"[\s\S]{0,400}?"url"\s*:\s*")([^"]*)(")/, (m, a, _old, b) => `${a}${origin}/${b}`],
   ['og:url', null, `<meta property="og:url" content="${origin}/">`],
   ['og:image', null, `<meta property="og:image" content="${origin}/assets/og-default.png">\n<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n<meta property="og:image:alt" content="Kodsol — Software, AI, Automation, Growth">\n<meta name="twitter:image" content="${origin}/assets/og-default.png">`],
   ['feed link', null, `<link rel="alternate" type="application/rss+xml" title="Kodsol Blog" href="${origin}/feed.xml">`],
@@ -75,7 +82,9 @@ for (const [label, re, tag] of edits) {
       process.exitCode = 1;
       continue;
     }
-    html = html.replace(re, () => tag);
+    // A function replacement is used as-is so capture groups can be rebuilt;
+    // a string replacement goes through a thunk so "$" in the tag stays literal.
+    html = html.replace(re, typeof tag === 'function' ? tag : () => tag);
   } else {
     if (html.includes(tag.split('\n')[0])) continue; // already present
     // og:url / og:image / feed go right after og:type; feed goes in <head>
@@ -89,6 +98,17 @@ for (const [label, re, tag] of edits) {
     }
   }
   n++;
+}
+
+// Safety net: the tag list above is hand-maintained, so anything it misses would
+// ship a placeholder domain to production. Sweep the whole document and refuse to
+// finish while any reference survives.
+const leftover = html.match(/https?:\/\/kodsol\.example[^"'\s]*/g) || [];
+if (leftover.length) {
+  console.error(`  !! ${leftover.length} placeholder reference(s) survived: ${[...new Set(leftover)].join(' | ')}`);
+  process.exitCode = 1;
+} else {
+  html = html.split('kodsol.example').join(origin);
 }
 
 fs.writeFileSync(file, html, 'utf8');
