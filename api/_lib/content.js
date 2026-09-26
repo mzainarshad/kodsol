@@ -222,6 +222,39 @@ function description(row) {
   return toPlainText(row.contentHtml || row.content || '', 165);
 }
 
+/**
+ * Normalise a tags column to a plain array of strings, WITHOUT escaping.
+ *
+ * Needed because the shape depends on the column type: `text[]` and `jsonb`
+ * arrive as arrays, but a plain `text` or `varchar` column arrives as a string.
+ * Code that did `tags.map(...)` therefore threw a TypeError on a string, and in
+ * the feed that call sat outside the try block, which surfaced to visitors as a
+ * bare 500 FUNCTION_INVOCATION_FAILED. cleanTags() cannot be used for XML
+ * because it HTML-escapes its output.
+ */
+function toTagList(raw) {
+  let list = raw;
+  if (typeof list === 'string') {
+    const trimmed = list.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      list = Array.isArray(parsed) ? parsed : trimmed.split(',');
+    } catch {
+      list = trimmed.split(',');
+    }
+  }
+  if (!Array.isArray(list)) {
+    // A single scalar (jsonb value, number, object) is treated as one tag.
+    list = list == null ? [] : [list];
+  }
+  return list
+    .map((t) => (t && typeof t === 'object' ? t.name || t.title || '' : String(t == null ? '' : t)))
+    .map((t) => t.trim().slice(0, 40))
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
 module.exports = {
   isValidSlug,
   normalizeSlug,
@@ -233,5 +266,6 @@ module.exports = {
   cleanTags,
   coverImage,
   description,
+  toTagList,
   SLUG_RE,
 };

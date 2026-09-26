@@ -43,6 +43,24 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   let p = decodeURIComponent(url.pathname);
 
+  // --- diagnostics ---------------------------------------------------------
+  // Mirrors the deployed /api/health function so the same self-check can be run
+  // locally before pushing. Vercel serves api/health.js automatically.
+  if (p === '/api/health') {
+    const health = require('../api/health');
+    const shim = {
+      method: req.method,
+      headers: req.headers,
+      query: Object.fromEntries(url.searchParams),
+      setHeader(k, v) { res.setHeader(k, v); },
+      status(c) { res.statusCode = c; return shim; },
+      send(b) { res.end(b); return shim; },
+      json(b) { res.end(JSON.stringify(b)); return shim; },
+      end(b) { res.end(b); return shim; },
+    };
+    return health(req, shim);
+  }
+
   // --- blog routes (mirror vercel.json rewrites) --------------------------
   if (p === '/blog' || p === '/blog/') {
     const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1);

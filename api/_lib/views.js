@@ -9,7 +9,7 @@
 const { page, esc, siteUrl, SITE, BLOG_CSS } = require('./theme');
 const { sanitizeBody } = require('./sanitize');
 const {
-  renderBody, formatDate, toIso, readingTime, cleanTags, coverImage, description,
+  renderBody, formatDate, toIso, readingTime, cleanTags, toTagList, coverImage, description,
 } = require('./content');
 
 const ORG_ID = `${siteUrl('')}#organization`;
@@ -79,7 +79,7 @@ function articleLd(post) {
       publisher: { '@id': ORG_ID },
       isPartOf: { '@id': `${siteUrl('/blog')}#blog` },
       ...(img ? { image: { '@type': 'ImageObject', url: siteUrl(img) || img } } : {}),
-      ...(post.tags && post.tags.length ? { keywords: post.tags.join(', ') } : {}),
+      ...(toTagList(post.tags).length ? { keywords: toTagList(post.tags).join(', ') } : {}),
     },
     {
       '@type': 'BreadcrumbList',

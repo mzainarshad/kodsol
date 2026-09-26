@@ -9,7 +9,7 @@
 
 const blog = require('./_lib/blog');
 const { siteUrl, SITE, esc } = require('./_lib/theme');
-const { isValidSlug, toIso, formatDate } = require('./_lib/content');
+const { isValidSlug, toIso, formatDate, toTagList } = require('./_lib/content');
 const { sanitizeBody, toPlainText, safeImageUrl } = require('./_lib/sanitize');
 const { describeDbError } = require('./_lib/db');
 const { safeHandler } = require('./_lib/handler');
@@ -80,8 +80,8 @@ module.exports = safeHandler('feed', async function handler(req, res) {
         `      <guid isPermaLink="true">${x(url)}</guid>`,
         p.publishedAt ? `      <pubDate>${x(rfc822(p.publishedAt))}</pubDate>` : '',
         p.author ? `      <dc:creator>${x(p.author)}</dc:creator>` : '',
-        p.tags && p.tags.length
-          ? p.tags.map((t) => `      <category>${x(t)}</category>`).join('\n')
+        toTagList(p.tags).length
+          ? toTagList(p.tags).map((t) => `      <category>${x(t)}</category>`).join('\n')
           : '',
         `      <description>${x(strip(p.contentHtml || p.content))}</description>`,
         img ? `      <enclosure url="${x(siteUrl(img))}" type="image/png" length="0"/>` : '',

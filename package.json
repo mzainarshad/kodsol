@@ -8,7 +8,7 @@
     "dev:vercel": "vercel dev",
     "lint": "node scripts/lint-all.js",
     "render:preview": "node scripts/preview.js",
-    "test": "node scripts/test-security.js && node scripts/preview.js && node scripts/check-tech-section.js && node scripts/test-db-resilience.js",
+    "test": "node scripts/test-security.js && node scripts/preview.js && node scripts/check-tech-section.js && node scripts/test-db-resilience.js && node scripts/test-health.js && node scripts/test-feed.js",
     "check:schema": "node scripts/check-schema.js",
     "check:links": "node scripts/check-links.js",
     "check:tech": "node scripts/check-tech-section.js",
@@ -19,7 +19,10 @@
     "build:index": "node scripts/make-index.js",
     "set:url": "node scripts/set-site-url.js",
     "build:favicon": "node scripts/extract-favicon.js",
-    "build:og": "node scripts/make-og-image.js"
+    "build:og": "node scripts/make-og-image.js",
+    "test:feed": "node scripts/test-feed.js",
+    "test:health": "node scripts/test-health.js",
+    "check:health": "node scripts/test-health.js"
   },
   "dependencies": {
     "pg": "^8.13.1",
