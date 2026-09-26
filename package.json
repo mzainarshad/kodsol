@@ -1,0 +1,33 @@
+{
+  "name": "kodsol-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kodsol marketing site with a server-rendered Supabase-backed blog.",
+  "scripts": {
+    "dev": "node scripts/dev-mock.js",
+    "dev:vercel": "vercel dev",
+    "lint": "node --check api/_lib/theme.js && node --check api/_lib/sanitize.js && node --check api/_lib/content.js && node --check api/_lib/db.js && node --check api/_lib/blog.js && node --check api/_lib/views.js && node --check api/blog.js && node --check api/article.js && node --check api/sitemap.js && node --check api/feed.js && node --check scripts/dev-mock.js && node --check scripts/make-index.js && node --check scripts/make-og-image.js && node --check scripts/audit-seo.js && node --check scripts/set-site-url.js && node --check scripts/check-tech-section.js && node --check scripts/test-tech-scroll.js",
+    "render:preview": "node scripts/preview.js",
+    "test": "node scripts/test-security.js && node scripts/preview.js && node scripts/check-tech-section.js",
+    "check:schema": "node scripts/check-schema.js",
+    "check:links": "node scripts/check-links.js",
+    "check:tech": "node scripts/check-tech-section.js",
+    "test:scroll": "node scripts/test-tech-scroll.js",
+    "test:viewports": "node scripts/test-tech-viewports.js",
+    "audit:seo": "node scripts/audit-seo.js",
+    "build:index": "node scripts/make-index.js",
+    "set:url": "node scripts/set-site-url.js",
+    "build:favicon": "node scripts/extract-favicon.js",
+    "build:og": "node scripts/make-og-image.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "sanitize-html": "^2.14.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}
